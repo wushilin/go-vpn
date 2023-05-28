@@ -78,6 +78,9 @@ Explanation
 * Request remote to route `172.19.0.0/16;172.31.0.0/16` in addition to `192.168.115.211/32` (the local IP)
 * Require client certificate is signed by `ca.pem` and has commonName of `vpnServer`
 
+
+**NOTE: The server and client IP does not have to be in the same SUBNET!!**
+
 ## Fault tolerance
 Connection will be forever retried. It would eventually re-establish connection whenever network disconnect is encountered.
 
