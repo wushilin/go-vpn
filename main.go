@@ -4,33 +4,28 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	coder "github.com/wushilin/go-vpn/encryption"
-	"github.com/wushilin/go-vpn/message"
-	"github.com/wushilin/go-vpn/transport"
+	"github.com/wushilin/pool"
+	"golang.org/x/net/context"
 
-	"github.com/songgao/packets/ethernet"
 	"github.com/songgao/water"
+	"github.com/wushilin/go-vpn/common"
+	"github.com/wushilin/go-vpn/piper"
+	"github.com/wushilin/go-vpn/transport"
 )
 
 var server_mode bool
 var server_address string
 var bind_string string
-var key_string string = ""
-var MASTER_KEY []byte = []byte{}
-var aescoder coder.Coder = nil
 var laddr = ""
 var routes = ""
-var remote_routes = make([]string, 0)
-var mode = ""
+var commonName = ""
 
 func validate_params() {
 	if server_mode {
@@ -54,354 +49,23 @@ func validate_params() {
 	}
 }
 
-func run_server_loop(iface *water.Interface) {
-	run_server(iface)
-}
-func run_server(iface *water.Interface) {
-	conn := setup_server_transport(mode)
-	defer conn.Close()
-	log.Println("Accepted incoming connection")
-	handle(iface, conn)
-}
-func setup_server_transport(mode string) transport.Transport {
-	if mode == "quic" {
-		return setup_server_transport_quic()
-	} else if mode == "tcp" {
-		return setup_server_transport_tcp4()
-	} else {
-		log.Fatalf("mode can only be tcp or quic")
-		return nil
-	}
-}
-
-func setup_client_transport(mode string) transport.Transport {
-	if mode == "quic" {
-		return setup_client_transport_quic()
-	} else if mode == "tcp" {
-		return setup_client_transport_tcp4()
-	} else {
-		log.Fatal("mode can only be tcp or quic")
-		return nil
-	}
-}
-func setup_server_transport_quic() transport.Transport {
-	config := transport.QuicConfig{
-		CertFile: "server.pem",
-		KeyFile:  "server.key",
-		CAFile:   "ca.pem",
-	}
-	ss := transport.NewQuicServerTransport(config, bind_string)
-	buf := make([]byte, 3)
-	ss.Read(buf)
-	return ss
-}
-
-func setup_client_transport_quic() transport.Transport {
-	config := transport.QuicConfig{
-		CertFile: "client.pem",
-		KeyFile:  "client.key",
-		CAFile:   "ca.pem",
-	}
-	return transport.NewQuicClientTransport(config, server_address)
-}
-func setup_server_transport_udp4() transport.Transport {
-	transport := transport.NewUDPServerTransport(bind_string)
-	buffer := make([]byte, 3)
-	transport.Read(buffer)
-	return transport
-}
-
-func setup_client_transport_udp4() transport.Transport {
-	transport := transport.NewUDPClientTransport(server_address)
-	transport.Write([]byte{0, 0, 0})
-	return transport
-}
-func setup_server_transport_tcp4() transport.Transport {
-	var err error
-	aescoder, err = coder.NewAESCoder(MASTER_KEY)
-	//aescoder = coder.DummyCoder{}
-	if err != nil {
-		log.Fatal("Can't use the specified MASTER_KEY:", err)
-	}
-	server, err := net.Listen("tcp4", bind_string)
-	if err != nil {
-		log.Fatalf("Failed to LISTEN to %s:%s", bind_string, err)
-	}
-	log.Println("Waiting for client...")
-	conn, err := server.Accept()
-	if err != nil {
-		server.Close()
-		log.Fatalf("Failed to accept connection: %v\n", err)
-	}
-	server.Close()
-	return conn
-}
-func to_array(input string) []string {
-	tokens := strings.Split(input, ";")
-	result := make([]string, 0)
-	for _, next := range tokens {
-		next = strings.TrimSpace(next)
-		if next == "" {
-			continue
-		}
-		result = append(result, next)
-	}
-	return result
-}
-
-func array_contains(arr []string, str string) bool {
-	for _, next := range arr {
-		if next == str {
-			return true
-		}
-	}
-	return false
-}
-
-func simplify(addr string) string {
-	tokens := strings.Split(addr, "/")
-	return tokens[0] + "/32"
-}
-
-var CRYPT_BUFFER = make([]byte, 4096)
-
-func crypt(buffer []byte) []byte {
-	if aescoder == nil {
-		return buffer
-	}
-	return aescoder.Encrypt(buffer, CRYPT_BUFFER)
-}
-
-func decrypt(buffer []byte) []byte {
-	if aescoder == nil {
-		return buffer
-	}
-	return aescoder.Decrypt(buffer, CRYPT_BUFFER)
-}
-func exchange_route(conn transport.Transport) bool {
-	to_request := to_array(routes)
-	if !array_contains(to_request, simplify(laddr)) {
-		to_request = append(to_request, simplify(laddr))
-	}
-	final_string := strings.Join(to_request, ";")
-
-	encrypted_final_string := crypt([]byte(final_string))
-	data := message.WrapEnvelope(message.CMD_ANNOUNCE_SUBNETS, encrypted_final_string)
-	conn.Write(data)
-
-	for i := 0; i < 2; i++ {
-		buffer := make([]byte, 4096)
-		nread, err := message.DecodeEnvelopFrom(conn, buffer)
-		if err != nil {
-			log.Printf("Failed to deode excahnge info, %v\n", err)
-			return false
-		}
-		msg_received := message.Envelope(buffer[:nread])
-		switch msg_received.Type() {
-		case message.CMD_OK:
-			log.Printf("Remote added my route: %s", final_string)
-		case message.CMD_NOT_OK:
-			log.Printf("Remote failed to add my route: %s", final_string)
-			return false
-		case message.CMD_ANNOUNCE_SUBNETS:
-			data := msg_received.Data()
-			data_str_raw := decrypt(data)
-
-			routes_to_add := to_array(string(data_str_raw))
-			if add_routes(routes_to_add) {
-				conn.Write(message.OK())
-			} else {
-				conn.Write(message.NotOK())
-			}
-		default:
-			log.Printf("Remote sent something garbage!")
-			return false
-		}
-	}
-	return true
-}
-
-func server_auth(conn transport.Transport) bool {
-	buffer := make([]byte, 4096)
-	challenge := message.NewChallenge()
-	fmt.Printf("Sending challenge %v\n", challenge)
-	conn.Write(challenge)
-	read_count, err := message.DecodeEnvelopFrom(conn, buffer)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-
-	response := message.Envelope(buffer[:read_count])
-	if response[0] != message.CMD_AUTH_RESPONSE {
-		log.Println("Wrong response type!")
-		return false
-	}
-	if !message.VerifyChallenge(MASTER_KEY, challenge, response) {
-		log.Println("Wrong answer!")
-		return false
-	}
-	log.Println("Challenge Response Accepted")
-	conn.Write(message.OK())
-	return true
-}
-
-func client_auth(conn transport.Transport) bool {
-	buffer := make([]byte, 4096)
-	read_count, err := message.DecodeEnvelopFrom(conn, buffer)
-	if err != nil {
-		return false
-	}
-
-	challenge := message.Envelope(buffer[:read_count])
-
-	response := message.Respond(challenge, MASTER_KEY)
-
-	_, err = conn.Write(response)
-	if err != nil {
-		log.Println("Write failed")
-		return false
-	}
-
-	read_count, err = message.DecodeEnvelopFrom(conn, buffer)
-	if err != nil {
-		return false
-	}
-
-	response = message.Envelope(buffer[:read_count])
-	if !response.IsOK() {
-		log.Println("Server rejected")
-		return false
-	}
-	log.Println("Server accepted!")
-	return true
-}
-func handle(iface *water.Interface, conn transport.Transport) {
-	// all handshake must be done in 3 seconds
-	connt, is_net_conn := conn.(net.Conn)
-	if is_net_conn {
-		connt.SetReadDeadline(time.Now().Add(3 * time.Second))
-	}
-	if server_mode && !server_auth(conn) {
-		log.Println("Server Auth Failed")
-		return
-	}
-
-	if !server_mode && !client_auth(conn) {
-		log.Println("Client Auth Failed")
-		return
-	}
-	if !exchange_route(conn) {
-		log.Println("Exchange route failed")
-		return
-	}
-	log.Println("LINK UP!")
-	if is_net_conn {
-		connt.SetReadDeadline(time.Time{})
-	}
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go copy_iface_to_conn(iface, conn, wg)
-	wg.Add(1)
-	go copy_conn_to_iface(iface, conn, wg)
-	wg.Wait()
-}
-
-func copy_iface_to_conn(iface *water.Interface, conn transport.Transport, wg *sync.WaitGroup) {
-	defer wg.Done()
-	var frame ethernet.Frame
-	size_buf := make([]byte, 3)
-	for {
-		frame.Resize(1500)
-		n, err := iface.Read([]byte(frame))
-		if err != nil {
-			// TODO: How to make this timeout?
-			log.Fatal("Connection broken: ", err)
-		}
-		frame = frame[:n]
-		to_write := crypt(frame)
-		to_write_size := len(to_write)
-		size_buf[0] = message.CMD_DATAFRAME
-		size_buf[1] = byte(to_write_size / 256)
-		size_buf[2] = byte(to_write_size % 256)
-		conn.Write(size_buf)
-		conn.Write(to_write)
-	}
-}
-
-func copy_conn_to_iface(iface *water.Interface, conn transport.Transport, wg *sync.WaitGroup) {
-	defer wg.Done()
-	buffer := make([]byte, 4096)
-	for {
-		nread, err := message.DecodeEnvelopFrom(conn, buffer)
-		if err != nil {
-			log.Fatal("Connection broken: ", err)
-		}
-		env := message.Envelope(buffer[:nread])
-
-		//log.Println("Received envelope with", nread, "bytes")
-		if env.Type() != message.CMD_DATAFRAME {
-			log.Fatal("Sending package type", env.Type(), "at the wrong time!")
-		}
-		var new_frame = decrypt(buffer[3:nread])
-		frame := ethernet.Frame(new_frame)
-		iface.Write(frame)
-	}
-}
-
-func run_client_loop(iface *water.Interface) {
-	run_client(iface)
-}
-
-func setup_client_transport_tcp4() transport.Transport {
-	var err error
-	aescoder, err = coder.NewAESCoder(MASTER_KEY)
-	if err != nil {
-		log.Fatal("AES failure", err)
-	}
-	conn, err := net.Dial("tcp4", server_address)
-	if err != nil {
-		log.Fatalf("Failed to CONNECT to %s:%s\n", server_address, err)
-	}
-	log.Printf("Connected to %s\n", server_address)
-	return conn
-}
-func run_client(iface *water.Interface) {
-	conn := setup_client_transport(mode)
-	defer conn.Close()
-	handle(iface, conn)
-}
-
-func clean_up() {
-	delete_routes(remote_routes)
-}
 func main() {
+	stop_context, cancel_function := context.WithCancel(context.TODO())
 	flag.BoolVar(&server_mode, "l", false, "Run as server mode")
 	flag.StringVar(&server_address, "s", "", "Server to Connect To")
 	flag.StringVar(&bind_string, "b", "", "Bind address")
 	flag.StringVar(&laddr, "laddr", "", "Local address in CIDR notation(10.1.0.10/24)")
-	flag.StringVar(&routes, "r", "", "Network to ask remote to route to local in cidr;cidr; format (10.0.0.0/8;192.168.44.7/32;...)")
-	flag.StringVar(&mode, "mode", "tcp", "Network protocol. Support TCP and QUIC")
-	flag.StringVar(&key_string, "key", "", "AES key (32 chars). If shorter, padded with space ' ' at the end")
+	flag.StringVar(&routes, "route", "", "Network to ask remote to route to local in cidr;cidr; format (10.0.0.0/8;192.168.44.7/32;...)")
+	flag.StringVar(&commonName, "commonName", "", "Allowed remote certificate common name, default is No Check")
 	flag.Parse()
-
+	log.Println("This is the new version")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT, syscall.SIGHUP, syscall.SIGQUIT)
 	go func() {
 		<-sigs
-		clean_up()
-		os.Exit(0)
+		fmt.Println("")
+		cancel_function()
 	}()
-	if key_string == "" {
-		log.Fatalf("Please give a key by -key xxx flag")
-	}
-	if len(key_string) > 32 {
-		log.Fatalf("Key is too long. max is 32 characters")
-	}
-	for len(key_string) < 32 {
-		key_string = key_string + " "
-	}
-	MASTER_KEY = []byte(key_string)
 	if laddr == "" {
 		if server_mode {
 			laddr = "10.54.0.10/24"
@@ -415,80 +79,156 @@ func main() {
 		log.Printf("Not requesting additional routing from other party. you can specify -r parameter to request")
 	}
 	validate_params()
-	config := water.Config{
-		DeviceType: water.TUN,
-	}
-	config.Name = "TUN17"
-	ifce, err := water.New(config)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if !bringUpLink() {
-		log.Fatalf("Failed to bring link UP\n")
-	}
-	if !setIPAddress() {
-		log.Fatalf("Failed to set IP Address to %s\n", laddr)
-	}
 	if server_mode {
 		log.Println("Mode: Server, Bind:", bind_string)
-		run_server_loop(ifce)
 	} else {
 		log.Println("Mode: Client, Target:", server_address)
-		run_client_loop(ifce)
+	}
+
+	run := true
+	for run {
+		select {
+		case <-stop_context.Done():
+			log.Println("Context stopped. Breaking")
+			run = false
+		default:
+		}
+		if !run {
+			// no need to cleanup, routes and TUN devices will be deleted automatically
+			break
+		}
+		func() {
+			var iface *water.Interface
+			var trans transport.Transport
+			var pipe *piper.Pipe
+			defer func() {
+				if iface != nil {
+					log.Println("Deleting interface TUN17")
+					iface.Close()
+				}
+				if pipe != nil {
+					log.Println("Closing pipe")
+					pipe.Close()
+				}
+			}()
+			config := water.Config{
+				DeviceType: water.TUN,
+			}
+			config.Name = "TUN17"
+			var err error
+			iface, err = water.New(config)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if !common.BringUpLink() {
+				log.Fatalf("Failed to bring link UP\n")
+			}
+			if !common.SetIPAddress(laddr) {
+				log.Fatalf("Failed to set IP Address to %s\n", laddr)
+			}
+			if server_mode {
+				trans, err = setup_server_transport(stop_context, commonName)
+			} else {
+				trans, err = setup_client_transport(stop_context, commonName)
+			}
+			if err != nil {
+				log.Printf("Setup Transport Error: %s\n", err)
+				if !server_mode {
+					time.Sleep(3 * time.Second)
+				}
+				return
+			}
+
+			pipe, err = piper.NewPipe(iface, trans, generate_routes(routes, laddr))
+
+			if err != nil {
+				log.Fatal(err)
+			}
+			done := make(chan bool)
+			go func() {
+				errlocal := pipe.Run(stop_context, server_mode)
+				log.Printf("Link Down!")
+				if errlocal != nil {
+					log.Printf("The service didn't work well... %s", errlocal)
+					time.Sleep(3 * time.Second)
+				}
+				done <- true
+			}()
+			<-done
+			pipe.Close()
+			log.Println("Service Loop Ended. Restarting...")
+		}()
 	}
 }
 
-func add_routes(what []string) bool {
-	result := true
-	if len(remote_routes) > 0 {
-		delete_routes(remote_routes)
+func maker() ([]byte, error) {
+	return make([]byte, 4096), nil
+}
+
+func generate_routes(routes string, laddr string) []string {
+	result := make([]string, 0)
+	result = append(result, simplify(laddr))
+	for _, next := range common.ToArray(routes) {
+		result = append(result, next)
 	}
-	for _, next := range what {
-		if !add_route(next) {
-			result = false
-		}
-	}
-	remote_routes = what
 	return result
 }
 
-func delete_routes(what []string) bool {
-	result := true
-	for _, next := range what {
-		if !delete_route(next) {
-			result = false
+func simplify(addr string) string {
+	tokens := strings.Split(addr, "/")
+	return tokens[0]
+}
+
+var POOL = pool.NewFixedPool(200, maker)
+
+func test_channel() {
+	c := make(chan []byte, 1000)
+	start := time.Now()
+	wg := new(sync.WaitGroup)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10000000; i++ {
+			buffer, _ := POOL.Borrow()
+			for j := 0; j < len(buffer); j++ {
+				buffer[j] = 1
+			}
+			c <- buffer
 		}
+		close(c)
+	}()
+
+	go func() {
+		defer wg.Done()
+		var count int64 = 0
+		for buffer := range c {
+			// received
+			for _, b := range buffer {
+				count += int64(b)
+			}
+			POOL.Return(buffer)
+		}
+		fmt.Println("Total bytes", count)
+	}()
+	wg.Wait()
+	fmt.Println(POOL.CreatedCount())
+	fmt.Println("Total time", time.Since(start))
+}
+func setup_server_transport(ctx context.Context, certName string) (transport.Transport, error) {
+	config := transport.QuicConfig{
+		CertFile: "server.pem",
+		KeyFile:  "server.key",
+		CAFile:   "ca.pem",
 	}
-	remote_routes = make([]string, 0)
-	return result
+	ss, err := transport.NewQuicServerTransport(config, bind_string, ctx, certName)
+	return ss, err
 }
 
-func delete_route(next string) bool {
-	return cmd("route", "delete", next, "dev", "TUN17") == nil
-}
-
-func bringUpLink() bool {
-	return cmd("link", "set", "dev", "TUN17", "up") == nil
-}
-
-func setIPAddress() bool {
-	return cmd("addr", "add", laddr, "dev", "TUN17") == nil
-}
-
-func cmd(args ...string) error {
-	ipcmd := "/usr/sbin/ip"
-	log.Println(ipcmd, strings.Join(args, " "))
-	cmd := exec.Command(ipcmd, args...)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-
-	if err := cmd.Run(); err != nil {
-		log.Printf("Failed to run: %v\n", err)
-		return err
+func setup_client_transport(ctx context.Context, certName string) (transport.Transport, error) {
+	config := transport.QuicConfig{
+		CertFile: "client.pem",
+		KeyFile:  "client.key",
+		CAFile:   "ca.pem",
 	}
-	return nil
-}
-
-func add_route(next string) bool {
-	return cmd("route", "add", next, "dev", "TUN17") == nil
+	return transport.NewQuicClientTransport(config, server_address, ctx, certName)
 }
