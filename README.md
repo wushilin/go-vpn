@@ -11,6 +11,26 @@ Let me know if you need other platform support!
 * make sure your `/usr/sbin/ip` is there. It uses the command to manipulate IP address assignment and routes
 * Make sure your golang is of `1.20` or newer.
 
+The program may warn about UDP buffer size, it is OK if you don't want to adjust it. It has no significant effect because the IP Frame is typically max at 1500 bytes.
+
+See https://github.com/quic-go/quic-go/wiki/UDP-Receive-Buffer-Size
+
+In short, if you can and keen to adjust it once and for all, use this command:
+
+```bash
+# sysctl -w net.core.rmem_max=2500000
+```
+
+To make it permenant, edit /etc/sysctl.conf and add
+```
+net.core.rmem_max=2500000
+```
+
+then run
+```bash
+# sysctl -p
+```
+
 # How it works
 This program has server mode and client mode.
 
