@@ -139,7 +139,7 @@ func (v *Pipe) Run(ctx context.Context, is_server bool) error {
 			route_string := string(x.Data)
 			array := common.ToArray(route_string)
 			for _, next := range array {
-				if !common.AddRoute(next) {
+				if !common.AddRoute(v.Iface.Name(), next) {
 					log.Printf("Unable to add route next due to error: %s", next)
 					return message.FAIL()
 				}

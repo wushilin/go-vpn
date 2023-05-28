@@ -21,14 +21,14 @@ func cmd(args ...string) error {
 	return nil
 }
 
-func AddRoute(next string) bool {
-	return cmd("route", "add", next, "dev", "TUN17") == nil
+func AddRoute(device, next string) bool {
+	return cmd("route", "add", next, "dev", device) == nil
 }
 
-func BringUpLink() bool {
-	return cmd("link", "set", "dev", "TUN17", "up") == nil
+func BringUpLink(device string) bool {
+	return cmd("link", "set", "dev", device, "up") == nil
 }
 
-func SetIPAddress(laddr string) bool {
-	return cmd("addr", "add", laddr, "dev", "TUN17") == nil
+func SetIPAddress(device, laddr string) bool {
+	return cmd("addr", "add", laddr, "dev", device) == nil
 }

@@ -24,6 +24,7 @@ var bind_string string
 var laddr = ""
 var routes = ""
 var commonName = ""
+var device_name = ""
 
 func validate_params() {
 	if server_mode {
@@ -49,14 +50,14 @@ func validate_params() {
 
 func main() {
 	stop_context, cancel_function := context.WithCancel(context.TODO())
-	flag.BoolVar(&server_mode, "l", false, "Run as server mode")
-	flag.StringVar(&server_address, "s", "", "Server to Connect To")
-	flag.StringVar(&bind_string, "b", "", "Bind address")
-	flag.StringVar(&laddr, "laddr", "", "Local address in CIDR notation(10.1.0.10/24)")
-	flag.StringVar(&routes, "route", "", "Network to ask remote to route to local in cidr;cidr; format (10.0.0.0/8;192.168.44.7/32;...)")
+	flag.BoolVar(&server_mode, "l", false, "Listen. This means it will run as server mode. Default is client mode")
+	flag.StringVar(&server_address, "s", "", "Server to Connect To. Required client param; no default")
+	flag.StringVar(&bind_string, "b", "", "Bind address. Required server param; no default")
+	flag.StringVar(&laddr, "laddr", "", "Local address in CIDR notation(e.g. 10.1.0.10/24). Default server: `10.54.0.10/24`, default client: `10.54.0.11/24`")
+	flag.StringVar(&routes, "route", "", "Network to ask remote to route to local in cidr;cidr; format (10.0.0.0/8;192.168.44.7/32;...). Default is local address only")
 	flag.StringVar(&commonName, "commonName", "", "Allowed remote certificate common name, default is No Check")
+	flag.StringVar(&device_name, "tunname", "TUN17", "Use alternate device name. Default is `TUN17`")
 	flag.Parse()
-	log.Println("This is the new version")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT, syscall.SIGHUP, syscall.SIGQUIT)
 	go func() {
@@ -74,7 +75,7 @@ func main() {
 		}
 	}
 	if routes == "" {
-		log.Printf("Not requesting additional routing from other party. you can specify -r parameter to request")
+		log.Printf("Not requesting additional routing from other party. you can specify -route parameter to request")
 	}
 	validate_params()
 	if server_mode {
@@ -101,7 +102,7 @@ func main() {
 			var pipe *piper.Pipe
 			defer func() {
 				if iface != nil {
-					log.Println("Deleting interface TUN17")
+					log.Println("Deleting interface ", device_name)
 					iface.Close()
 				}
 				if pipe != nil {
@@ -112,16 +113,16 @@ func main() {
 			config := water.Config{
 				DeviceType: water.TUN,
 			}
-			config.Name = "TUN17"
+			config.Name = device_name
 			var err error
 			iface, err = water.New(config)
 			if err != nil {
 				log.Fatal(err)
 			}
-			if !common.BringUpLink() {
+			if !common.BringUpLink(device_name) {
 				log.Fatalf("Failed to bring link UP\n")
 			}
-			if !common.SetIPAddress(laddr) {
+			if !common.SetIPAddress(device_name, laddr) {
 				log.Fatalf("Failed to set IP Address to %s\n", laddr)
 			}
 			if server_mode {

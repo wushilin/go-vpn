@@ -2,16 +2,24 @@
 A secure, single executable (same for client/server) point to point VPN server that uses QUIC protocol. It also supports routing propagation by options
 
 
+This program only supports **LINUX** at the moment. But it is easy to port this over to other platform. 
+
+Let me know if you need other platform support!
+
+# Before you start
+* make sure you have `root` access!
+* make sure your `/usr/sbin/ip` is there. It uses the command to manipulate IP address assignment and routes
+
 # How it works
 This program has server mode and client mode.
 
 Both server and client must run as root, as we need to manipulate the system tunnel device.
 
-By default tunnel device used is TUN17, you can specify the name by `-tunname tun12` to switch to `tun12` instead.
+By default tunnel device used is `TUN17`, you can specify the name by `-tunname tun12` to switch to `tun12` instead.
 
 Server will start binding to QUIC (UDP) port and wait for client to connect.
 
-Client connects via QUIC with mutual. 
+Client connects via QUIC with mutual TLS as authentication. This is the security mechanism the VPN is offering. 
 * Server always load `server.pem`, `server.key`, `ca.pem` for TLS configuration.
 * Client always load `client.pem`, `client.key`, `ca.pem` for TLS configuration.
 
