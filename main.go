@@ -131,9 +131,6 @@ func main() {
 			}
 			if err != nil {
 				log.Printf("Setup Transport Error: %s\n", err)
-				if !server_mode {
-					time.Sleep(3 * time.Second)
-				}
 				return
 			}
 
