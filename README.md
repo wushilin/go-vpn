@@ -9,9 +9,12 @@ Let me know if you need other platform support!
 # Before you start
 * make sure you have `root` access!
 * make sure your `/usr/sbin/ip` is there. It uses the command to manipulate IP address assignment and routes
+* Make sure your golang is of `1.20` or newer.
 
 # How it works
 This program has server mode and client mode.
+
+It has **zero** allocation. It only need to do a one time allocation. No GC is ever required on this service most likely.
 
 Both server and client must run as root, as we need to manipulate the system tunnel device.
 
@@ -57,6 +60,47 @@ Explanation
 
 ## Fault tolerance
 Connection will be forever retried. It would eventually re-establish connection whenever network disconnect is encountered.
+
+# Installing
+You can install via
+
+```bash
+# go install github.com/wushilin/go-vpn@v1.0.0
+```
+
+The binary should be in your `$GOPATH/bin`
+
+# Systemd
+You can run this as systemd for both server and client.
+
+An example of server:
+```
+[Unit]
+Description=The VPN by Go
+After=syslog.target network-online.target remote-fs.target nss-lookup.target
+Wants=network-online.target
+        
+[Service]
+Type=simple
+#User=service
+#Group=service
+WorkingDirectory=/opt/vpn
+PIDFile=/opt/vpn/vpn.pid
+ExecStart=/opt/vpn/go-vpn -l -b 0.0.0.0:24192 -tunname tun99
+ExecStop=/bin/kill -s QUIT $MAINPID
+PrivateTmp=true
+SyslogIdentifier=go-vpn
+        
+[Install]
+WantedBy=multi-user.target
+```
+
+# Performance
+The service can easily scale beyond 100MiB/s, depending on your network speed and processor speed.
+
+The protocol is secure by default via open standard, TLS may slow down the speed a little bit but I hope you think
+it is worth it.
+
 
 # Built in certificate
 The built in certificate is valid for server hostname that looks like `*.local`. If you want to use the default certificate (not recommended), you can add your server's IP address to client's `/etc/hosts` as `something.local`, and connect by that hostname with `-s something.local:4792`.
