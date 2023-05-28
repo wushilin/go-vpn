@@ -7,11 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
-	"github.com/wushilin/pool"
 	"golang.org/x/net/context"
 
 	"github.com/songgao/water"
@@ -179,41 +177,6 @@ func simplify(addr string) string {
 	return tokens[0]
 }
 
-var POOL = pool.NewFixedPool(200, maker)
-
-func test_channel() {
-	c := make(chan []byte, 1000)
-	start := time.Now()
-	wg := new(sync.WaitGroup)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 10000000; i++ {
-			buffer, _ := POOL.Borrow()
-			for j := 0; j < len(buffer); j++ {
-				buffer[j] = 1
-			}
-			c <- buffer
-		}
-		close(c)
-	}()
-
-	go func() {
-		defer wg.Done()
-		var count int64 = 0
-		for buffer := range c {
-			// received
-			for _, b := range buffer {
-				count += int64(b)
-			}
-			POOL.Return(buffer)
-		}
-		fmt.Println("Total bytes", count)
-	}()
-	wg.Wait()
-	fmt.Println(POOL.CreatedCount())
-	fmt.Println("Total time", time.Since(start))
-}
 func setup_server_transport(ctx context.Context, certName string) (transport.Transport, error) {
 	config := transport.QuicConfig{
 		CertFile: "server.pem",

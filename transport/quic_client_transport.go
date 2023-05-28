@@ -105,9 +105,12 @@ func NewQuicClientTransport(config QuicConfig, server_addr string, ctx context.C
 		ControlStream: control_stream,
 		Streams:       make([]quic.Stream, STREAMS),
 		BufferChannel: make(chan Buffer, 1000),
-		BufferPool: pool.NewFixedPool(100, func() ([]byte, error) {
+		BufferPool: pool.NewFixedPool(300, func() ([]byte, error) {
 			return make([]byte, 4096), nil
-		})}
+		}).WithIdleTimeout(99999999).WithTester(func(b []byte) bool {
+			return true
+		}),
+	}
 	go resultp.RunReaders()
 	result = resultp
 	cause = nil
