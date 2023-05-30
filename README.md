@@ -132,4 +132,24 @@ The built in certificate is valid for server hostname that looks like `*.local`.
 Please consider using https://github.com/wushilin/minica 
 
 Alternatively, a script version is available at https://github.com/wushilin/minica-script
+
+
+# Ultra fast mode
+If you mainly use in intranet, or you mainly uses Secure Transport and don't care about authentication/authorization, you can use the ultrafast version.
+
+It uses udp transport in client/server mode. No security, no encryption. Everything transmitted as if it is IP frames.
+
+It is probably 3~4 times faster.
+
+```bash
+Usage of ./ultrafast:
+  -connect string
+        Peer UDP host and port in [ip|hostname]:port format. Default is ""
+  -laddr string
+        Local interface address. Default 10.99.99.1/30 for server, 10.99.99.2/30 for client
+  -listen string
+        UDP Listen address in ip:port format. Default is 0.0.0.0:20192 (default "0.0.0.0:20192")
+  -tunname string
+        Device name (default "TUN17")
+```
 # Enjoy
