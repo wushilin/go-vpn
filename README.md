@@ -154,7 +154,19 @@ Usage of ./ultrafast:
   -tunname string
         Device name (default "TUN17")
 ```
+If you don't use aeskey, you are effectively using aeskey of ' ' x 32.
+
+The server will PIN the connection to the first connected peer and will refuse to talk to anyone else. 
+
+This will cause clients restarted on a diffrent port number not be able to connect ever again. 
+Therefore, we implemented a encrypted PING to allow client to PING server and let server update the PINed peer address.
 
 NOTE: The AES key is to securely verify client's identity by using AES encrypted payload. It is not meant to encrypt the traffic as that would be slower.
+
+Of course, it can be implemented, just not done yet.
+
+Don't run more than 1 client to talk to the server.
+
+
 
 # Enjoy
