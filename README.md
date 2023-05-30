@@ -143,6 +143,8 @@ It is probably 3~4 times faster.
 
 ```bash
 Usage of ./ultrafast:
+  -aeskey string
+        AES 256 encryption key. Will be padded with ' ' or trimmed if not 32 chars
   -connect string
         Peer UDP host and port in [ip|hostname]:port format. Default is ""
   -laddr string
@@ -152,4 +154,7 @@ Usage of ./ultrafast:
   -tunname string
         Device name (default "TUN17")
 ```
+
+NOTE: The AES key is to securely verify client's identity by using AES encrypted payload. It is not meant to encrypt the traffic as that would be slower.
+
 # Enjoy
