@@ -179,6 +179,7 @@ func main() {
 			<-done
 			pipe.Close()
 			log.Println("Service Loop Ended. Restarting...")
+			global_stats.IncreaseReconnectCount()
 		}()
 	}
 }
