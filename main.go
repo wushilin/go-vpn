@@ -15,6 +15,7 @@ import (
 	"github.com/songgao/water"
 	"github.com/wushilin/go-vpn/common"
 	"github.com/wushilin/go-vpn/piper"
+	"github.com/wushilin/go-vpn/stats"
 	"github.com/wushilin/go-vpn/transport"
 )
 
@@ -49,6 +50,7 @@ func validate_params() {
 }
 
 func main() {
+	var global_stats = stats.New()
 	stop_context, cancel_function := context.WithCancel(context.TODO())
 	flag.BoolVar(&server_mode, "l", false, "Listen. This means it will run as server mode. Default is client mode")
 	flag.StringVar(&server_address, "s", "", "Server to Connect To. Required client param; no default")
@@ -135,7 +137,7 @@ func main() {
 				return
 			}
 
-			pipe, err = piper.NewPipe(iface, trans, generate_routes(routes, laddr))
+			pipe, err = piper.NewPipe(iface, trans, generate_routes(routes, laddr), global_stats)
 
 			if err != nil {
 				log.Fatal(err)
@@ -157,16 +159,10 @@ func main() {
 	}
 }
 
-func maker() ([]byte, error) {
-	return make([]byte, 4096), nil
-}
-
 func generate_routes(routes string, laddr string) []string {
 	result := make([]string, 0)
 	result = append(result, simplify(laddr))
-	for _, next := range common.ToArray(routes) {
-		result = append(result, next)
-	}
+	result = append(result, common.ToArray(routes)...)
 	return result
 }
 

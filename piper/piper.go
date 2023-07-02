@@ -10,9 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/songgao/water"
 	"github.com/wushilin/go-vpn/common"
 	"github.com/wushilin/go-vpn/message"
+	"github.com/wushilin/go-vpn/stats"
 	"github.com/wushilin/go-vpn/transport"
 )
 
@@ -23,6 +25,7 @@ type Pipe struct {
 	FailFlag  bool
 	Mutex     *sync.Mutex
 	Routes    []string
+	Stats     *stats.GlobalStats
 }
 
 func (v *Pipe) AtomicExecute(target func()) {
@@ -83,7 +86,7 @@ func (v *Pipe) ProcessControlCommand(expectedType message.CMD_TYPE, handler func
 	})
 	return err
 }
-func NewPipe(iface *water.Interface, transport transport.Transport, routes []string) (*Pipe, error) {
+func NewPipe(iface *water.Interface, transport transport.Transport, routes []string, stats *stats.GlobalStats) (*Pipe, error) {
 	file, ok := iface.ReadWriteCloser.(*os.File)
 	if !ok {
 		return nil, fmt.Errorf("water.Interface %v is does not have a valid file descriptor", iface)
@@ -95,6 +98,7 @@ func NewPipe(iface *water.Interface, transport transport.Transport, routes []str
 		FailFlag:  false,
 		Mutex:     new(sync.Mutex),
 		Routes:    routes,
+		Stats:     stats,
 	}, nil
 }
 
@@ -168,19 +172,25 @@ func (v *Pipe) Run(ctx context.Context, is_server bool) error {
 	wg.Add(2)
 	go v.file_to_transport(ctx, wg)
 	go v.transport_to_file(ctx, wg)
-	go v.print_alloc(ctx)
+	go v.print_stats(ctx)
 	log.Printf("Link UP!")
 	wg.Wait()
 	return nil
 }
 
-func (v *Pipe) print_alloc(ctx context.Context) {
-	log.Printf("Print Alloc Started")
+func (v *Pipe) print_stats(ctx context.Context) {
+	log.Printf("Print Stats Started")
 	for !v.Failed() {
-		log.Println("Transport Stats: ", v.Transport.GetStats())
-		time.Sleep(10 * time.Second)
+		downloaded := v.Stats.DownloadedBytes()
+		uploaded := v.Stats.UploadedBytes()
+		downloaded_str := humanize.Bytes(downloaded)
+		uploaded_str := humanize.Bytes(uploaded)
+		reconnected_count := v.Stats.ReconnectedCount()
+		log.Printf("Sent: %s, Received: %s, Reconnect Count: %d", uploaded_str, downloaded_str, reconnected_count)
+		//log.Println("Transport Stats: ", v.Transport.GetStats())
+		time.Sleep(120 * time.Second)
 	}
-	log.Printf("Print Alloc Stopped")
+	log.Printf("Print Stats Stopped")
 }
 
 // Handle a command and give a reply
@@ -229,6 +239,7 @@ func (v *Pipe) file_to_transport(ctx context.Context, wg *sync.WaitGroup) {
 			v.Fail()
 			break
 		}
+		v.Stats.IncreaseUploadedBytes(uint64(nread))
 		//log.Printf("%s Written %d bytes\n", tag, nwritten)
 	}
 }
@@ -274,6 +285,7 @@ func (v *Pipe) transport_to_file(ctx context.Context, wg *sync.WaitGroup) {
 			v.Fail()
 			break
 		}
+		v.Stats.IncreaseDownloadedBytes(uint64(nread))
 		//log.Printf("%s Written %d bytes\n", tag, nwritten)
 	}
 }
