@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/songgao/water"
 	"github.com/wushilin/go-vpn/common"
 	"github.com/wushilin/go-vpn/message"
@@ -172,25 +171,9 @@ func (v *Pipe) Run(ctx context.Context, is_server bool) error {
 	wg.Add(2)
 	go v.file_to_transport(ctx, wg)
 	go v.transport_to_file(ctx, wg)
-	go v.print_stats(ctx)
 	log.Printf("Link UP!")
 	wg.Wait()
 	return nil
-}
-
-func (v *Pipe) print_stats(ctx context.Context) {
-	log.Printf("Print Stats Started")
-	for !v.Failed() {
-		downloaded := v.Stats.DownloadedBytes()
-		uploaded := v.Stats.UploadedBytes()
-		downloaded_str := humanize.Bytes(downloaded)
-		uploaded_str := humanize.Bytes(uploaded)
-		reconnected_count := v.Stats.ReconnectedCount()
-		log.Printf("Sent: %s, Received: %s, Reconnect Count: %d", uploaded_str, downloaded_str, reconnected_count)
-		//log.Println("Transport Stats: ", v.Transport.GetStats())
-		time.Sleep(120 * time.Second)
-	}
-	log.Printf("Print Stats Stopped")
 }
 
 // Handle a command and give a reply

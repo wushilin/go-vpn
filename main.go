@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/dustin/go-humanize"
 	"github.com/songgao/water"
 	"github.com/wushilin/go-vpn/common"
 	"github.com/wushilin/go-vpn/piper"
@@ -49,8 +50,28 @@ func validate_params() {
 	}
 }
 
+func print_stats(v *stats.GlobalStats, ctx context.Context) {
+	log.Printf("Print Stats Started")
+	var run = true
+	for run {
+		select {
+		case <-ctx.Done():
+			run = false
+		case <-time.After(30 * time.Second):
+			downloaded := v.DownloadedBytes()
+			uploaded := v.UploadedBytes()
+			downloaded_str := humanize.Bytes(downloaded)
+			uploaded_str := humanize.Bytes(uploaded)
+			reconnected_count := v.ReconnectedCount()
+			log.Printf("Sent: %s, Received: %s, Reconnect Count: %d", uploaded_str, downloaded_str, reconnected_count)
+		}
+		//log.Println("Transport Stats: ", v.Transport.GetStats())
+	}
+	log.Printf("Print Stats Stopped")
+}
+
 func main() {
-	var global_stats = stats.New()
+
 	stop_context, cancel_function := context.WithCancel(context.TODO())
 	flag.BoolVar(&server_mode, "l", false, "Listen. This means it will run as server mode. Default is client mode")
 	flag.StringVar(&server_address, "s", "", "Server to Connect To. Required client param; no default")
@@ -60,6 +81,9 @@ func main() {
 	flag.StringVar(&commonName, "commonName", "", "Allowed remote certificate common name, default is No Check")
 	flag.StringVar(&device_name, "tunname", "TUN17", "Use alternate device name. Default is `TUN17`")
 	flag.Parse()
+	var global_stats = stats.New()
+	go print_stats(global_stats, stop_context)
+
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT, syscall.SIGHUP, syscall.SIGQUIT)
 	go func() {
