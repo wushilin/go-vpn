@@ -46,7 +46,7 @@ func CloseConn(conn quic.Connection, reason CLOSE_REASON) error {
 		return nil
 	}
 }
-func (v QuicConfig) GenerateTLSConfig(is_server bool) *tls.Config {
+func (v QuicConfig) GenerateTLSConfig(server_addr string, is_server bool) *tls.Config {
 	key_bytes, err := os.ReadFile(v.KeyFile)
 	if err != nil {
 		log.Fatal(err)
@@ -82,11 +82,20 @@ func (v QuicConfig) GenerateTLSConfig(is_server bool) *tls.Config {
 			NextProtos:   []string{"quic"},
 		}
 	} else {
-		return &tls.Config{
-			Certificates: []tls.Certificate{tlsCert},
-			RootCAs:      cert_pool, // used by client
-			NextProtos:   []string{"quic"},
-			ServerName:   "ceo.local",
+		if server_addr != "" {
+			return &tls.Config{
+				Certificates: []tls.Certificate{tlsCert},
+				RootCAs:      cert_pool, // used by client
+				NextProtos:   []string{"quic"},
+				ServerName:   server_addr,
+			}
+		} else {
+			return &tls.Config{
+				Certificates:       []tls.Certificate{tlsCert},
+				RootCAs:            cert_pool, // used by client
+				NextProtos:         []string{"quic"},
+				InsecureSkipVerify: true,
+			}
 		}
 	}
 }

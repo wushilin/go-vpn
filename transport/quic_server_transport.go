@@ -92,7 +92,7 @@ func NewQuicServerTransport(config QuicConfig, bind_string string, ctx context.C
 		}
 	}
 	defer cleanup()
-	listener, err = quic.ListenAddr(bind_string, config.GenerateTLSConfig(true), DefaultConfig())
+	listener, err = quic.ListenAddr(bind_string, config.GenerateTLSConfig("", true), DefaultConfig())
 	log.Println("Server listening on ", bind_string)
 	if err != nil {
 		return nil, err
