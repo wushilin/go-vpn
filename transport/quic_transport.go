@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,11 +84,12 @@ func (v QuicConfig) GenerateTLSConfig(server_addr string, is_server bool) *tls.C
 		}
 	} else {
 		if server_addr != "" {
+			tokens := strings.Split(server_addr, ":")
 			return &tls.Config{
 				Certificates: []tls.Certificate{tlsCert},
 				RootCAs:      cert_pool, // used by client
 				NextProtos:   []string{"quic"},
-				ServerName:   server_addr,
+				ServerName:   tokens[0],
 			}
 		} else {
 			return &tls.Config{
