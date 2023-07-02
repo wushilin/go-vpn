@@ -86,6 +86,7 @@ func (v QuicConfig) GenerateTLSConfig(is_server bool) *tls.Config {
 			Certificates: []tls.Certificate{tlsCert},
 			RootCAs:      cert_pool, // used by client
 			NextProtos:   []string{"quic"},
+			ServerName:   "ceo.local",
 		}
 	}
 }
