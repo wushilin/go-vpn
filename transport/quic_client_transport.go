@@ -82,7 +82,7 @@ func NewQuicClientTransport(config QuicConfig, server_addr string, ctx context.C
 	}
 
 	defer cleanup()
-	conn, err = quic.DialAddrContext(ctx, server_addr, config.GenerateTLSConfig(false), DefaultConfig())
+	conn, err = quic.DialAddr(ctx, server_addr, config.GenerateTLSConfig(false), DefaultConfig())
 	if err != nil {
 		return nil, err
 	}

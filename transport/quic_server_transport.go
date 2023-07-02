@@ -14,7 +14,7 @@ import (
 )
 
 type QuicServerTransport struct {
-	Listener      quic.Listener
+	Listener      *quic.Listener
 	Conn          quic.Connection
 	Streams       []quic.Stream
 	ControlStream quic.Stream
@@ -72,7 +72,7 @@ func (v *QuicServerTransport) Close() error {
 }
 
 func NewQuicServerTransport(config QuicConfig, bind_string string, ctx context.Context, certName string) (result Transport, cause error) {
-	var listener quic.Listener = nil
+	var listener *quic.Listener = nil
 	var conn quic.Connection = nil
 	var control_stream quic.Stream = nil
 	var err error
