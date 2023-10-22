@@ -23,3 +23,4 @@ daemon
 go-vpn
 udptun
 ultrafast
+*.local.*

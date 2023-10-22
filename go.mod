@@ -7,7 +7,7 @@ require (
 	github.com/quic-go/quic-go v0.38.1
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/wushilin/pool v1.0.1
-	golang.org/x/net v0.11.0
+	golang.org/x/net v0.12.0
 )
 
 require (
