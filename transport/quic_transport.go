@@ -36,7 +36,7 @@ var REASON_STRING = map[CLOSE_REASON]string{
 	CONTROL: "control stream can't be openned",
 }
 
-func CloseConn(conn quic.Connection, reason CLOSE_REASON) error {
+func CloseConn(conn *quic.Conn, reason CLOSE_REASON) error {
 	reason_s, ok := REASON_STRING[reason]
 	if !ok {
 		reason_s = "undefined"
@@ -143,7 +143,7 @@ func DefaultConfig() *quic.Config {
 	}
 }
 
-func decodePacket(str quic.Stream, buffer []byte) (int, error) {
+func decodePacket(str *quic.Stream, buffer []byte) (int, error) {
 	nread, err := io.ReadFull(str, buffer[:2])
 	if err != nil {
 		return nread, err
@@ -167,13 +167,13 @@ func Pong(reader io.Reader) error {
 	_, err := io.ReadFull(reader, buffer)
 	return err
 }
-func runReaders(pool *pool.Pool[[]byte], conn quic.Connection, mystreams []quic.Stream, ch chan Buffer, accept bool) error {
+func runReaders(pool *pool.Pool[[]byte], conn *quic.Conn, mystreams []*quic.Stream, ch chan Buffer, accept bool) error {
 	log.Printf("Starting %d reader streams...\n", len(mystreams))
 	defer func() {
 		log.Printf("Stopped %d reader streams.\n", len(mystreams))
 	}()
 	for i := 0; i < len(mystreams); i++ {
-		var str quic.Stream
+		var str *quic.Stream
 		var err error
 		if accept {
 			str, err = conn.AcceptStream(context.Background())

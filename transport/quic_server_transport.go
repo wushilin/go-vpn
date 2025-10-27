@@ -15,9 +15,9 @@ import (
 
 type QuicServerTransport struct {
 	Listener      *quic.Listener
-	Conn          quic.Connection
-	Streams       []quic.Stream
-	ControlStream quic.Stream
+	Conn          *quic.Conn
+	Streams       []*quic.Stream
+	ControlStream *quic.Stream
 	BufferChannel chan Buffer
 	BufferPool    *pool.Pool[[]byte]
 }
@@ -73,8 +73,8 @@ func (v *QuicServerTransport) Close() error {
 
 func NewQuicServerTransport(config QuicConfig, bind_string string, ctx context.Context, certName string) (result Transport, cause error) {
 	var listener *quic.Listener = nil
-	var conn quic.Connection = nil
-	var control_stream quic.Stream = nil
+	var conn *quic.Conn = nil
+	var control_stream *quic.Stream = nil
 	var err error
 	cleanup := func() {
 		if result == nil {
@@ -121,7 +121,7 @@ func NewQuicServerTransport(config QuicConfig, bind_string string, ctx context.C
 		Listener:      listener,
 		Conn:          conn,
 		ControlStream: control_stream,
-		Streams:       make([]quic.Stream, STREAMS),
+		Streams:       make([]*quic.Stream, STREAMS),
 		BufferChannel: make(chan Buffer, 1000),
 		BufferPool: pool.NewFixedPool(300, func() ([]byte, error) {
 			return make([]byte, 4096), nil

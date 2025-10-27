@@ -14,9 +14,9 @@ import (
 )
 
 type QuicClientTransport struct {
-	Conn          quic.Connection
-	Streams       []quic.Stream
-	ControlStream quic.Stream
+	Conn          *quic.Conn
+	Streams       []*quic.Stream
+	ControlStream *quic.Stream
 	BufferChannel chan Buffer
 	BufferPool    *pool.Pool[[]byte]
 }
@@ -66,8 +66,8 @@ func (v *QuicClientTransport) RunReaders() error {
 }
 
 func NewQuicClientTransport(config QuicConfig, server_addr string, ctx context.Context, certName string) (result Transport, cause error) {
-	var conn quic.Connection
-	var control_stream quic.Stream
+	var conn *quic.Conn
+	var control_stream *quic.Stream
 	var err error
 	var cleanup = func() {
 		if result == nil {
@@ -103,7 +103,7 @@ func NewQuicClientTransport(config QuicConfig, server_addr string, ctx context.C
 	resultp := &QuicClientTransport{
 		Conn:          conn,
 		ControlStream: control_stream,
-		Streams:       make([]quic.Stream, STREAMS),
+		Streams:       make([]*quic.Stream, STREAMS),
 		BufferChannel: make(chan Buffer, 1000),
 		BufferPool: pool.NewFixedPool(300, func() ([]byte, error) {
 			return make([]byte, 4096), nil
