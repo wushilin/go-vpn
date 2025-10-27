@@ -91,15 +91,15 @@ func main() {
 		fmt.Println("")
 		cancel_function()
 	}()
-	if laddr == "" {
-		if server_mode {
-			laddr = "10.54.0.10/24"
-			log.Printf("Default local addres set to %s\n", laddr)
-		} else {
-			laddr = "10.54.0.11/24"
-			log.Printf("Default local addres set to %s\n", laddr)
-		}
-	}
+	// // // if laddr == "" {
+	// // // 	if server_mode {
+	// // // 		laddr = "10.54.0.10/24"
+	// // // 		log.Printf("Default local addres set to %s\n", laddr)
+	// // // 	} else {
+	// // // 		laddr = "10.54.0.11/24"
+	// // // 		log.Printf("Default local addres set to %s\n", laddr)
+	// // // 	}
+	// // // }
 	if routes == "" {
 		log.Printf("Not requesting additional routing from other party. you can specify -route parameter to request")
 	}
@@ -148,8 +148,11 @@ func main() {
 			if !common.BringUpLink(device_name) {
 				log.Fatalf("Failed to bring link UP\n")
 			}
-			if !common.SetIPAddress(device_name, laddr) {
-				log.Fatalf("Failed to set IP Address to %s\n", laddr)
+			if laddr != "" {
+				log.Printf("Using specified local address %s\n", laddr)
+				if !common.SetIPAddress(device_name, laddr) {
+					log.Fatalf("Failed to set IP Address to %s\n", laddr)
+				}
 			}
 			if server_mode {
 				trans, err = setup_server_transport(stop_context, commonName)
