@@ -1,3 +1,11 @@
+# rust-vpn alternative
+
+This repo is likely to be abondoned, in favor of a rust variant of the same functionality. The rust version is much faster, can saturate  1gbps locally, or 200mbps on alibaba cloud.
+
+The logic is similar but not compatible. Rust variant also provides tcp and quic flavor. Some times, tcp over MTLS performs better than QUIC, especially over long distance.
+
+See https://github.com/wushilin/rust-vpn.git
+
 # go-vpn
 A secure, single executable (same for client/server) point to point VPN server that uses QUIC protocol. It also supports routing propagation by options
 
